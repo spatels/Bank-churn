@@ -1,0 +1,727 @@
+---
+title: "Untitled"
+author: "Satya Patel"
+date: "6/15/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+Understanding customer churn is critical for most businesses to find optimal solutions to improve customer retention, offer better, more customized services, and potentially attract new customers. Customer churn, also known as attrition, refers to a customer ending their relationship or business with a company. The rationale behind a customer churn analysis is for companies to determine customers at risk of leaving and convince their customers to stay with them.
+
+With the extensive data collected every day, data mining helps companies and industries transform this data into information that decision-makers can leverage to improve customer relations. The financial and banking sectors are highly competitive, making customer retention critical for long-term survival . [^1]: Sayed, Hend & Abdel-Fattah, Manal & Kholeif, Sherif. (2018). Predicting Potential Banking Customer Churn using Apache Spark ML and MLlib Packages: A Comparative Study. International Journal of Advanced Computer Science and Applications. 9. 10.14569/IJACSA.2018.091196
+
+Understanding churn dynamics allows banks to comprehend consumer behavior and patterns, forecast potential losses, and scale their efforts on appropriate retention actions. According to a study by Sina Esmaeilpour Charandabi, it is crucial to predict customer churn to avoid losing revenue. Not only that, but it would be easier for a bank to invest resources to maintain these existing customer relationships because it is estimated to "cost five times higher to acquire new customers" in an already intense competitive environment .[^2]: Esmaeilpour Charandabi, Sina. (2020). Prediction of Customer Churn in Banking Industry.
+
+Moreover, long-term customers become less costly to serve over time, generate higher profits, and provide new bank referrals. 
+
+Overall, understanding customer churn is important for any business. Applying machine learning techniques can help figure out why customers leave and accurately predict the types of consumer behavior to minimize and prevent customer loss.
+
+This study applies data mining methods to a data set with over 10,000 records of a banking institution's customer information to generate models to understand its customers and predict attrition using transaction data. R is used to preprocess this data set, partition it into training and validation data sets to perform Logistic Regression, KNN, and CART to understand the churn dynamics.
+
+## Scenario
+Business manager of a consumer credit card portfolio of a bank is facing a severe customer attrition problem in recent months. This is impacting the business. The business manager wants to leverage the power of data analytics to understand the primary reasons of attrition. She also wants to have an ability to understand the customers who are likely to close their accounts with the bank in near future, so that she can focus her efforts well in advance to retain those customers.[^3]:ATH Leaps. Best online data science course - Leaps Analyttica. (n.d.).  
+https://leaps.analyttica.com/sample_cases/11. 
+
+## Ask
+Understand the likelihood of existing customers  discontinuing their services with the bank and identify key indicators of customer churn vs. retention.
+
+##  Data Preparation
+The dataset was obtained from [kaggle](https://www.kaggle.com/sakshigoyal7/credit-card-customers) and released under to public under  CC0: Public Domain License updated in November 2020. 
+The dataset contains a total of 10,127 unique observations with 23 variables. The target variable is Attrited Customer, a binary variable that describes whether a customer decides to leave the bank.
+
+```{r ENVIRONMENT SETUP, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+rm(list=ls()) # remove all existing objects in the environment
+gc() #garbage collection 
+setwd('C:/Users/spatel/Projects/BankChurn') # set working directory
+# sink("./console_output.txt", append =T) # uncomment to write output to file
+## setup packages
+packages = c( "class","caret","cowplot", "DataExplorer", "dplyr",
+              "DT", "fastDummies", "ggplot2", "gridExtra",
+              "h2o", "highcharter","htmlwidgets","purrr", "ROCR", 
+              "stringr", "tidyr", "modelr","plyr",
+              "skimr","stringr","tidyverse", "ROSE", "rpart", "rpart.plot", "spplot") # required packages
+
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+} # install packages not yet installed on the machine
+
+invisible(lapply(packages, library, character.only = TRUE)) # loading required packages
+```
+
+```{r LOAD DATA, eval=FALSE, include=FALSE}
+dat0 = read.csv('BankChurners.csv', stringsAsFactors=T, head=T) # load data file
+dim(dat0) # get dimensions of the data (# of rows : 10127; # of columns :23)
+skimr::skim_without_charts(dat0) #  broad overview of a data frame
+
+```
+**Attribute Description**
+
+Out of the  23 variables, six are categorical and seventeen numeric. The variables are listed below:
+
+| **Unique Identifier** |                          |
+| :-------------------- | ------------------------ |
+| Clientum              | Client ID/Account Number |
+
+| **Target Variable** |                                                      |
+| :------------------ | ---------------------------------------------------- |
+| Attrition_Flag      | Whether the customer exists or attired (e.g., Churn) |
+
+The chart below showcases each categorical and numeric variable and its description. 
+
+| **Categorical  Variables** |                                                              |
+| -------------------------- | ------------------------------------------------------------ |
+| Gender                     | Male or Female                                               |
+| Education_Level            | Highest level of  Education Completed (i.e., High School, College, Graduate,  Post-Graduate, Doctorate, Uneducated,  Unknown) |
+| Marital_Status             | Single, Married,  Divorced, Unknown                          |
+| Income_Category            | Annual Income Category of the account holder  (< $40K, $40K - 60K, $60K - $80K, $80K-$120K, >$120K) |
+| Card_Category              | Blue, Silver, Gold, or  Platinum credit card                 |
+
+| **Numeric Variables**    |                                                              |
+| :----------------------- | ------------------------------------------------------------ |
+| Customer_Age             | Age of Customer in  years                                    |
+| Dependent_count          | Number of  dependents                                        |
+| Months_on_book           | Period of  relationship between customer and the bank        |
+| Total_Relationship_Count | Number of products  the customer has with the bank           |
+| Months_Inactive_12_mon   | Number of month(s)  inactive within the last 12 months       |
+| Contacts_Count_12_mon    | Number of contact  within the last 12 months                 |
+| Credit_Limit             | Credit Card Limit                                            |
+| Total_Revolving_Bal      | Total revolving  balance on the credit card                  |
+| Avg_Open_To_Buy          | Average credit  line open for the customer to buy within the last 12 months |
+| Total_Amt_Chng_Q4_Q1     | Change in  transaction amount from Quarter 4 over Quarter 1  |
+| Total_Trans_Amt          | Total transactions  within the last 12 months                |
+| Total_Trans_Ct           | Count of total  transactions the last 12 months              |
+
+## Data Processing
+Although the dataset is already clean and can be used for exploration,  it has some issues that complicate the implementation of the models.  Specifically, it is an imbalanced data set with 1,627 observations out of the 10,127 (16%) users leaving the bank in this dataset. Thus, it may heavily reduce the model's performance, and it is essential to overcome these issues by applying sampling techniques to the dataset.
+
+An imbalanced data set occurs when one class (Existing_Customer) of the dependent variable (Attrition_Flag) is overrepresented than the minority class (Attrited_Customer). Since the goal for the bank is to identify churned customers, it is crucial to balance the minority class to avoid inaccurate predictions by oversampling and normalizing the data and before implementing the models. After oversampling, our dataset had around 16,956 observations with 8,498 Existing Customers and 8,458 Existing Customers.
+
+The step-by-step process that was followed in this phase is documented below:
+
+1. The dataset was checked for missing values. No, missing values were found
+```{r DATA CLEANING MISSING}
+## check missing data
+matrix.na = is.na(dat0)
+pmiss = colMeans(matrix.na) # proportion of missing for each column
+nmiss = rowMeans(matrix.na) # proportion of missing for each row
+plot(pmiss)
+```
+
+2. Removed the last two columns as they were not relevant to the analysis.
+```{r DATA CLEANING REMOVE}
+dat <- dat0[,-c(1,22,23)] # take out the columns that are not required
+summary(dat)
+```
+
+3. Created frequency tables for all categorical variables to understand any bias in the data
+```{r EXPLORATION FREQUENCY}
+## frequency tables for categorical variables
+table(dat$Attrition_Flag) 
+table(dat$Gender)
+table(dat$Education_Level)
+table(dat$Marital_Status)
+table(dat$Income_Category)
+table(dat$Card_Category)
+```
+
+4. Studied the distributions of the quantitative variables.
+```{r EXPLORATION DISTRIBUTION}
+## distributions of the quantitative variables
+quant <- dat %>%
+          keep(is.numeric) %>% 
+          gather() %>% 
+          ggplot(aes(value)) +
+          facet_wrap(~ key, scales = "free") +
+          geom_histogram(fill = "#f26b38") +
+          sp_theme()
+brand_plot(quant)
+```
+
+5. Converted categorical variables into dummy variables and deleted the  original columns .
+
+```{R DATA PREPROCESSING, eval=FALSE, include=FALSE}
+## Converting factors to numeric
+dat2 <- dat 
+# converting columns with factors to numeric
+dat2$Attrition_Flag <- as.numeric(dat$Attrition_Flag) # Attired Customer=1; Existing Customer=2
+dat2$Gender <- as.numeric(dat$Gender) # M=2; F=1
+dat2$Education_Level <- as.numeric(dat$Education_Level) #	College=1; Doctorate=2; Graduate=3; High School=4; Post-Graduate=5; Uneducated=6; Unknown=7
+dat2$Marital_Status <- as.numeric(dat$Marital_Status) # Divorced=1; Married=2; Single=3; Unknown=4
+dat2$Income_Category <- as.numeric(dat$Income_Category) # $120K +=1; $40K - $60K=2; $60K - $80K=3; $80K - $120K =4; Less than $40K=5; Unknown=6
+dat2$Card_Category <- as.numeric(dat$Card_Category) # Blue=1; Gold=2; Platinum=3; Silver =4;
+View(dat2) # for use in spearman's correlation coefficeints.
+
+## converting dummy variables and take out columns that are not required
+#Creating dummy variables
+dat3 <- fastDummies::dummy_columns(dat, select_columns = c('Gender', 'Education_Level', 'Marital_Status','Income_Category', 
+                                                           'Card_Category'))
+#changing column names
+dat3$Education_Level_High_School = dat3$`Education_Level_High School`
+dat3$Education_Level_Post_Graduate = dat3$`Education_Level_Post-Graduate`
+dat3$Income_Category_40K_60K = dat3$`Income_Category_$40K - $60K`
+dat3$Income_Category_60_80K = dat3$`Income_Category_$60K - $80K`
+dat3$Income_Category_80K_120K = dat3$`Income_Category_$80K - $120K`
+dat3$Income_Category_120K_Plus= dat3$`Income_Category_$120K +`
+dat3$Income_Category_Less_than_40K = dat3$`Income_Category_Less than $40K`
+#Dropping Columns
+dat3$Gender<-NULL
+dat3$Education_Level<-NULL
+dat3$Marital_Status<-NULL
+dat3$Income_Category<-NULL
+dat3$Card_Category<-NULL
+dat3$`Education_Level_High School` <- NULL
+dat3$`Education_Level_Post-Graduate` <- NULL
+dat3$`Income_Category_$40K - $60K` <- NULL
+dat3$`Income_Category_$60K - $80K` <- NULL
+dat3$`Income_Category_$80K - $120K`<- NULL
+dat3$`Income_Category_$120K +` <- NULL
+dat3$`Income_Category_Less than $40K` <- NULL
+
+# take out the columns that are not required
+dat3 <- dat3[,-c(17,18)]
+View(dat3)
+# ***************** NOTE *****************    #
+# dat: original data cleaned ;                #
+# dat2: factors converted to numeric ;        #
+# dat3: factors converted to dummy variables  #
+```
+6. Conducted data exploration discussed below, and removed the outliers from Total_Amt_Chng_Q4_Q1. 
+
+```{r DATA EXPLORATION, eval=FALSE, include=FALSE}
+# DATA EXPLORATION-----------------------------------
+splitList = split(dat, dat$Attrition_Flag) # Split dat into a list of dataframes, one for existing and one for attrited customer
+
+attrited = splitList[[1]] # View Structure of split
+existing = splitList[[2]] # View Structure of split
+
+summary(attrited) # Summary of attrited customers
+summary(existing) # Summary of existing customers
+
+## Exploratory Data Analysis using DataExplorer (keep only one out of the three)
+DataExplorer::create_report(dat, output_file = "./output/report_clean_data_dat.html", report_title = "Data Profiling Report for dataset with original data cleaned") # report for dataset with original data cleaned
+# DataExplorer::create_report(dat2, output_file = "report_factor_to_numeric_dat2.html", report_title = "Data Profiling Report for dataset with factors converted to numeric") # report for dataset with factors converted to numeric
+# DataExplorer::create_report(dat3, output_file = "report_factor_to_dummy_dat3.html", report_title = "Data Profiling Report for dataset with factors converted to dummy variable") # report for dataset with factors converted to dummy variable
+```
+8. Performed Collinearity analysis. Removed columns Total_Trans_Amt and Avg_Open_To_Buy due to high correlation.
+```{r COLLINEARITY, eval=FALSE, include=FALSE}
+## Co-relation plot (using dat2) with Spearman method
+cor_spearman <- cor(dat2[, sapply(dat2, is.numeric)], method = 'spearman')
+View(cor_spearman)
+# Visualizing with a heatmap the correlation matrix with the pearson method
+hc <- as.matrix(data.frame(cor_spearman)) %>% 
+  round(3) %>% #round
+  hchart() %>% 
+  hc_add_theme(hc_theme_smpl()) %>%
+  hc_title(text = "Spearman's correlation coefficients", align = "center") %>% 
+  hc_legend(align = "center") %>% 
+  hc_colorAxis(stops = color_stops(colors = viridis::inferno(10))) %>%
+  hc_plotOptions(
+    series = list(
+      boderWidth = 0,
+      dataLabels = list(enabled = TRUE)))
+saveWidget(hc, file="./spearman_coreelation_coefficients.html")
+# REMOVE OUTLIERS + HIGH CORRELATION ----------------------------------------
+dat4 = dat[dat$Total_Amt_Chng_Q4_Q1 < 3, ]
+dat5 = dat2[dat2$Total_Amt_Chng_Q4_Q1 < 3, ]
+dat6 = dat3[dat3$Total_Amt_Chng_Q4_Q1 < 3, ]
+
+dat7 = subset(dat4, select = -c(Total_Trans_Amt, Avg_Open_To_Buy)) #original cleaned data w/o outliers and columns w/ collinearity >.8
+dat8 = subset(dat5, select = -c(Total_Trans_Amt, Avg_Open_To_Buy)) # as. numeric
+dat9 = subset(dat6, select = -c(Total_Trans_Amt, Avg_Open_To_Buy)) ##DUMMY (FOR KNN)
+```
+
+9. Performed over-sampling to adjust the class distribution of a data set due to the under-representation of Attired Customer.
+
+```{r SAMPLING, eval=FALSE, include=FALSE}
+#over-sampling for dummy
+dat9_over<- ovun.sample(formula = Attrition_Flag ~ ., data = dat9, method = "over")$data
+table(dat9_over$Attrition_Flag)
+dim(dat9_over)
+View(dat9_over)
+```
+10. Normalized the dataset to change the  values of numeric columns in the dataset to a common scale, without  distorting differences in the ranges of values since the variables have different ranges.
+
+```{r Normalize, eval=FALSE, include=FALSE}
+# split datset into numeric and dummy
+dat_9_over_numeric <- dat9_over[ , c(1:13)] 
+dat_9_over_dummy <- dat9_over[ , c(14:34)]
+
+# pre-process and normalize numerics
+preproc3 <- preProcess(dat_9_over_numeric, method=c("center", "scale"))
+normalized_dat9_over_numeric <- predict(preproc3, dat_9_over_numeric)
+
+# combine normalized numeric with dummy
+normalized_dat9_over <- cbind(normalized_dat9_over_numeric, dat_9_over_dummy)
+summary(normalized_dat9_over)
+view(normalized_dat9_over)
+```
+11. Divided  the dataset such that 80 % of the data was for training the model, and 20  % of the data was used to evaluate the model.
+
+## Data Exploration
+After transforming the dataset to align with the problem statement, an exploratory analysis was conducted to check for any outliers, correlated variables, and meaningful insights. This is an essential step before going into building the classification models. Exploratory Analysis will help determine which variables are imperative and assist in making appropriate assumptions.
+
+First, a univariate analysis was conducted on the numeric variables. Then bar charts were created to visualize the various categorical variables.
+```{r EXPLORATION NUMERICAL AND CATEGORICAL VARIABLES}
+p1 <- ggplot(dat, aes(x = Gender, fill = Gender)) +
+  geom_bar() +
+  geom_text(aes(y = ..count.. -200, 
+                label = paste0(round(prop.table(..count..),4) * 100, '%')), 
+            stat = 'count', 
+            position = position_dodge(.1), 
+            size = 3) + 
+  sp_theme() + 
+  theme(legend.position = "none")
+p1 <- brand_plot(p1)
+
+p2 <- ggplot(dat, aes(x = Dependent_count, fill = as.factor(Dependent_count))) +
+  geom_bar() +
+  geom_text(aes(y = ..count.. -200, 
+                label = paste0(round(prop.table(..count..),4) * 100, '%')), 
+            stat = 'count', 
+            position = position_dodge(.1), 
+            size = 3) + 
+  sp_theme() + 
+  theme(legend.position = "none")
+p2 <- brand_plot(p2)
+
+p3 <- ggplot(dat, aes(x = Total_Relationship_Count,fill = as.factor(Total_Relationship_Count))) +
+  geom_bar() +
+  geom_text(aes(y = ..count.. -200, 
+                label = paste0(round(prop.table(..count..),4) * 100, '%')), 
+            stat = 'count', 
+            position = position_dodge(.1), 
+            size = 3) + 
+  sp_theme() + 
+  theme(legend.position = "none")
+p3 <- brand_plot(p3)
+
+p4 <- ggplot(dat, aes(x = Marital_Status, fill = Marital_Status)) +
+  geom_bar() +
+  geom_text(aes(y = ..count.. -200, 
+                label = paste0(round(prop.table(..count..),4) * 100, '%')), 
+            stat = 'count', 
+            position = position_dodge(.1), 
+            size = 3) + 
+  sp_theme() + 
+  theme(legend.position = "none")
+p4 <- brand_plot(p4)
+
+p5 <- ggplot(dat, aes(x = Income_Category,fill = Income_Category)) +
+  geom_bar() +
+  geom_text(aes(y = ..count.. -200, 
+                label = paste0(round(prop.table(..count..),4) * 100, '%')), 
+            stat = 'count', 
+            position = position_dodge(.1), 
+            size = 3) + 
+  sp_theme() + 
+  theme(legend.position = "none")
+p5 <- brand_plot(p5)
+
+p6 <- ggplot(dat, aes(x = Card_Category, fill = Card_Category)) +
+  geom_bar() +
+  geom_text(aes(y = ..count.. -200, 
+                label = paste0(round(prop.table(..count..),4) * 100, '%')), 
+            stat = 'count', 
+            position = position_dodge(.1), 
+            size = 3) + 
+  sp_theme() + 
+  theme(legend.position = "none")
+p6 <- brand_plot(p6)
+
+p7 <- ggplot(dat, aes(x = Months_on_book, fill = asfactor(Months_on_book))) +
+  geom_bar() +
+  geom_text(aes(y = ..count.. -200, 
+                label = paste0(round(prop.table(..count..),4) * 100, '%')), 
+            stat = 'count', 
+            position = position_dodge(.1), 
+            size = 3) + 
+  sp_theme() + 
+  theme(legend.position = "none")
+p7 <- brand_plot(p7)
+
+p8 <- ggplot(dat, aes(x = Months_Inactive_12_mon, fill = as.factor(Months_Inactive_12_mon))) +
+  geom_bar() +
+  geom_text(aes(y = ..count.. -200, 
+                label = paste0(round(prop.table(..count..),4) * 100, '%')), 
+            stat = 'count', 
+            position = position_dodge(.1), 
+            size = 3) + 
+  sp_theme() + 
+  theme(legend.position = "none")
+p8 <- brand_plot(p8)
+
+grid.arrange(p1, p2, p3, p4, ncol=2)
+grid.arrange(p5,p6,p7,p8, ncol=2)
+
+p9 <- ggplot(dat, aes(x = Attrition_Flag, fill = Attrition_Flag)) +
+  geom_bar() +
+  geom_text(aes(y = ..count.. -200, 
+                label = paste0(round(prop.table(..count..),4) * 100, '%')), 
+            stat = 'count', 
+            position = position_dodge(.1), 
+            size = 3) + 
+  sp_theme() + 
+  theme(legend.position = "none")
+p9 <- brand_plot(p9)
+```
+These graphs show that the Attrition Flag and Card category were drastically skewed. Eighty-four percent of the belonged existing customer, and ninety-three percent of the data belonged to the card category  Blue.  
+All the distribution graphs show that average open to buy, average utilization ratio, and credit limit do not show a normal distribution as the rest of the numeric variables.
+
+Next, different boxplots were created to see if there were any meaningful insights can be derived. 
+```{r EXPLORATION BoXPLOT}
+bp1 <- ggplot(dat, aes(x = Attrition_Flag, y = Customer_Age, fill = Attrition_Flag)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values = c("#f26b38", "#38bff2")) + 
+  labs(y= 'Customer Age') + 
+  sp_theme() + 
+  theme(legend.position = "none")
+brand_plot(bp1)
+
+bp2 <- ggplot(dat, aes(x = Attrition_Flag, y = Dependent_count, fill = Attrition_Flag)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values = c("#f26b38", "#38bff2")) + 
+  labs(y= 'Dependent Count') + 
+  sp_theme() + 
+  theme(legend.position = "none")
+brand_plot(bp2)
+
+bp3 <- ggplot(dat, aes(x = Attrition_Flag, y = Months_on_book, fill = Attrition_Flag)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values = c("#f26b38", "#38bff2")) + 
+  labs(y= 'Months on Book') + 
+  sp_theme() + 
+  theme(legend.position = "none")
+brand_plot(bp3)
+
+bp4 <- ggplot(dat, aes(x = Attrition_Flag, y = Total_Relationship_Count, fill = Attrition_Flag)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values = c("#f26b38", "#38bff2")) + 
+  labs(y= 'Total Relationship Count') + 
+  sp_theme() + 
+  theme(legend.position = "none")
+brand_plot(bp4)
+
+bp5 <- ggplot(dat, aes(x = Attrition_Flag, y = Months_Inactive_12_mon, fill = Attrition_Flag)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values = c("#f26b38", "#38bff2")) + 
+  labs(y= 'Months Inactive (12 Month Period)') + 
+  sp_theme() + 
+  theme(legend.position = "none")
+brand_plot(bp5)
+
+bp6 <- ggplot(dat, aes(x = Attrition_Flag, y = Contacts_Count_12_mon, fill = Attrition_Flag)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values = c("#f26b38", "#38bff2")) + 
+  labs(y= 'Contract Count (12 Month Period)') + 
+  sp_theme() + 
+  theme(legend.position = "none")
+brand_plot(bp6)
+
+bp7 <- ggplot(dat, aes(x = Attrition_Flag, y = Credit_Limit, fill = Attrition_Flag)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values = c("#f26b38", "#38bff2")) + 
+  labs(y= 'Credit Limit') + 
+  sp_theme() + 
+  theme(legend.position = "none") 
+brand_plot(bp7)
+
+bp8 <- ggplot(dat, aes(x = Attrition_Flag, y = Avg_Open_To_Buy, fill = Attrition_Flag)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values = c("#f26b38", "#38bff2"))  + 
+  labs(y= 'Average Open to Buy') + 
+  sp_theme() + 
+  theme(legend.position = "none")
+brand_plot(bp8)
+```
+Total Amount Change Q4-Q1 had outliers that seem out of place. After studying the plot, I decided to remove the outliers above 3.0.
+
+Target variable graphed against the other variables to identify any trends
+```{r TARGET VARIABLE}
+plot1 <- ggplot(data = dat, aes(x = Gender, fill = Attrition_Flag)) +
+  geom_bar(position = "fill") + 
+  sp_theme()+ 
+  scale_fill_manual(values = c("#f26b38", "#38bff2"))
+plot1 <-brand_plot(plot1)
+
+plot2 <- ggplot(data = dat, aes(x = Dependent_count, fill = Attrition_Flag)) +
+  geom_bar(position = "fill") + 
+  sp_theme()+ 
+  scale_fill_manual(values = c("#f26b38", "#38bff2"))
+plot2 <-brand_plot(plot2)
+
+plot3 <- ggplot(data = dat, aes(x = Education_Level, fill = Attrition_Flag)) +
+  geom_bar(position = "fill") + 
+  sp_theme()+ 
+  scale_fill_manual(values = c("#f26b38", "#38bff2"))
+plot3 <-brand_plot(plot3)
+
+plot4 <- ggplot(data = dat, aes(x = Marital_Status, fill = Attrition_Flag)) +
+  geom_bar(position = "fill")+ 
+  sp_theme()+ 
+  scale_fill_manual(values = c("#f26b38", "#38bff2"))
+plot4 <-brand_plot(plot4)
+
+plot5 <- ggplot(data = dat, aes(x = Income_Category, fill = Attrition_Flag)) +
+  geom_bar(position = "fill") + 
+  sp_theme()+ 
+  scale_fill_manual(values = c("#f26b38", "#38bff2"))
+plot5 <-brand_plot(plot5)
+
+plot6 <- ggplot(data = dat, aes(x = Card_Category, fill = Attrition_Flag)) +
+  geom_bar(position = "fill") + 
+  sp_theme()+ 
+  scale_fill_manual(values = c("#f26b38", "#38bff2"))
+plot6 <-brand_plot(plot6)
+
+plot7 <- ggplot(data = dat, aes(x = Total_Relationship_Count, fill = Attrition_Flag)) +
+  geom_bar(position = "fill") + 
+  sp_theme()+ 
+  scale_fill_manual(values = c("#f26b38", "#38bff2"))
+plot7 <-brand_plot(plot7)
+
+plot8 <- ggplot(data = dat, aes(x = Months_Inactive_12_mon, fill = Attrition_Flag)) +
+  geom_bar(position = "fill")+ 
+  sp_theme()+ 
+  scale_fill_manual(values = c("#f26b38", "#38bff2"))
+plot8 <-brand_plot(plot8)
+
+plot9 <- ggplot(data = dat, aes(x = Contacts_Count_12_mon, fill = Attrition_Flag)) +
+  geom_bar(position = "fill")+ 
+  sp_theme()+ 
+  scale_fill_manual(values = c("#f26b38", "#38bff2"))
+plot9 <-brand_plot(plot9)
+
+grid.arrange(plot1, plot2, plot3, plot4, plot5, plot6, plot7, plot8, plot9, nrow=3, ncol=3)
+```
+After looking at individual variables, and some relationships between them, a Correlation matrix was created to see any significant correlations between the variables. 
+```{r EXPLORATION COLLINEAR}
+hc
+```
+There is a positive correlation between Total transaction amount and Total Transaction Count. Also, there is a positive correlation between the Average Open to Buy and  Credit Limit. After considering the relationship of the variables in each pair with the Attrition flag, we decided to remove the total transaction amount and average open to buy.
+
+Since there are no other highly correlated variables, running a Principal Component Analysis (PCA) is unnecessary. PCA is run on all variables to determine significance. If all other variables are uncorrelated, then in turn, they are all significant to the model.
+
+## Data Mining Tasks
+Various models have been employed to classify an observation as “Attired customer.” These models include K-Nearest Neighbors, decision tree, and logistic regression.
+
+Since the outcome is a binary categorical variable, Prediction models such as logistic regression, k- NN (prediction), and regression tree would not correctly determine the response variable. Therefore, they are not included in the study. 
+
+The criteria to choose a model will be based on a high specificity level with a low error rate.
+
+### KNN
+K-nearest neighbor algorithm (KNN) is a non-parametric approach used for regression and classification. For both situations, the input consists of the nearest or imminent training samples in the feature space k. The KNN algorithm assumes that similar things exist close to or "near" each other. To select the K suitable for the churn data, we ran the KNN algorithm several times with different values of K. We chose the K that reduces the number of errors encountered—all the while maintaining the algorithm's ability to make accurate predictions with never before seen given data. 
+
+Additionally, the KNN results were plotted into the graph K-neighbors versus Accuracy. It shows an overall upward trend in accuracy up to a point, after which the accuracy starts declining again. In this instance, the optimal number of nearest neighbors is 5 (k = 5), with a test accuracy of 90%.
+
+Note, an extensive training dataset takes a long time to find distances to all the neighbors and then identify the nearest one(s).  
+
+For training the model using the KNN, we have employed the Caret package. Before train() method, we have used train control() method. It controls the computational nuances of the train() method. I am setting three parameters of trainControl() method. The "method" parameter contains the details about the resampling method. For this project, I used repeatedcv, which is repeated cross-validation. The "number" parameter contains the number of resampling iterations. The "repeats" parameter holds the entire set of folds to compute our repeated cross-validation or repeatedcv. I am using the number 10 and repeats of 3. This trainControl() method will return a list. I will pass this on to the train() method before training the KNN classifier, set.seed(). For the training KNN classifier, the train() method should be passed with the "method" parameter as "KNN." We are passing our target variable y. The Y ~. denotes the formula for using all the attributes in our classifier and y as our output. The "trControl" parameter is passed with results from our trainControl() method. The "preProcess" parameter is for preprocessing our training data.
+
+As discussed earlier data, preprocessing is a mandatory task. We are passing two values in our "preProcess" parameter "center" & "scale". Both help to center and scale the data. The "tuneLength" parameter holds an integer value and tunes the KNN algorithm.
+
+While KNN can be used for both classification and prediction, the target response variable is categorical and requires KNN classification. In creating the model, twenty-eight variables were selected, excluding variables Card_Category_Platinum, Education_Level_High_School, Education_Level_Graduate, Marital_Status_Single, and Marital_Status_Unknown  as their p-value is greater than 0.05. This model is also run on the 80:20 data partition for training and validation data. Since KNN uses distance measure, data was normalized to reduce the risk of large values having a dominant effect on the model compared to the rest. I  choose to allow R to select a specified value for best k to select the optimal k for our model.
+
+Next, I created x-train, x-test, y-train, and y-test variables by specifying the column corresponding to the dependent and independent variables. In this case, column indexes 2 - 29 are our independent variables, while column 1 is our dependent variable.
+
+I then iterate through multiple KNN algorithms, each with a different number of Ks. 
+
+Using the function noted above, I plugged the x-train, x-test, y-train, and y-test variables and a sequence of odd-numbered Ks from 1 - 18, with multiple runs of cutoffs at 0.5 0.4, and 0.3. 
+
+From running the KNN model, using a cutoff value of 0.5 gave us the best results as it resulted in the highest specificity meaning a higher accuracy for predicting attrited customers. Although the 0.5 cutoff yields the highest overall error rate while 0.4 and 0.3 cutoffs gave us a lower overall error rate and higher sensitivity value, prioritizing the specificity is better for the bank's use case.
+The optimal K we found was seven, which means that the algorithm considered seven nearest neighbors to have the most accurate results.
+
+The error rate, in this case, is (440/3426), which is about a 12.8% error. For Existing Customer classification, the error rate is 354/1690, which is approximately 20.95%, while the Attrited Customer error rate is 86/1736, which is about 4.95%. Therefore, the Attrited Customer classification is exceptionally accurate, while the Existing Customer classification is mildly accurate.
+Having a higher accuracy rate for Attrited Customers as indicated by the specificity would be more beneficial for the bank, as they prioritize mitigating the number of churning customers. By accurately classifying which customers will churn, the bank would better retain those customers. 
+
+### Logistic Regression
+Logistic regression, also known as the logit model, is easy to implement, interpret, and efficient to train. It is a robust classification model used for dichotomous outcome variables. In my model, the outcome variable is Attrition_Flag, consisting of two classes: existing and attrited customers. Initially, I ran the step() using forward selection without splitting the dataset to obtain the stepwise summary of the models.
+
+Next, I partitioned the data into an 80:20 data set, with 80% (or 13,592 records) for training and 20% (or 3,399 records) for testing the model. With this, I ran the logistic regression model for forward, backward, and stepwise (e.g., both) selections using the glm() function on the normalized dataset. From this, I calculated the error rate, sensitivity, and specificity with cutoffs at 0.5, 0.4, and 0.3 for each selection. 
+
+```{r LOGIT}
+# take a look at how many acceptance and rejection first
+sample <- sample.int(n = nrow(normalized_dat9_over), size = floor(.80*nrow(normalized_dat9_over)), replace = F)
+train <- normalized_dat9_over[sample, ]
+test  <- normalized_dat9_over[-sample, ]
+nrow(train)
+nrow(test)
+View(test)
+
+
+min.model = glm(Attrition_Flag ~ 1, data = train, family = 'binomial')
+max.model = glm(Attrition_Flag ~ ., data = train, family = 'binomial')
+max.formula = formula(max.model)
+
+#Forward Selection	
+obj1 = step(min.model, direction='forward', scope=max.formula) # it will print out models in each step	
+summary(obj1) # it will give you the final model	
+get.or(summary(obj1)) # 19 variables	
+
+#backward selection	
+obj2 = step(max.model, direction='backward', scope=max.model) # it will print out models in each step	
+summary(obj2) # it will give you the final model	
+get.or(summary(obj2)) #22 variables	
+
+#Stepwise prediction	
+obj3 = step(min.model, direction='both', scope= list(lower=min.model, upper=max.model)) # it will print out models in each step	
+summary(obj3) # it will give you the final model	
+get.or(summary(obj3)) #variables
+
+yhat = predict(obj, newdata = test, type='response')
+hist(yhat)
+
+dichotomize = function(yhat, cutoff=.5) {
+  out = rep(0, length(yhat))
+  out[yhat > cutoff] = 1
+  out
+}
+
+yhat.class = dichotomize(yhat, .5)
+unique(yhat.class)
+ytestl = as.numeric(test$Attrition_Flag)- 1
+unique(ytestl)
+err = mean(yhat.class != ytestl) # misclassification error rate
+err
+table(yhat.class, ytestl)
+
+sen = function(ytrue, yhat) {
+  ind.true1 = which(ytrue == 1)
+  mean( ytrue[ind.true1] == yhat[ind.true1] )
+}
+
+spe = function(ytrue, yhat) {
+  ind.true0 = which(ytrue == 0)
+  mean( ytrue[ind.true0] == yhat[ind.true0] )
+}
+
+sen(ytestl, yhat.class)# 83.00117
+spe(ytestl, yhat.class)#81.35991
+```
+
+**Forward Selection**: In forward selection, I begin with an empty model and add variables one by one that improves the model. The final forward selection model uses 19 variables to predict the outcome. All the variables in the final model have a p-value less than 0.05 (p-value < 5%), making it significant. 
+
+**Backward Selection**: In backward selection, the model begins with all the variables and eliminates the variables as we proceed. In this case, the final backward selection model uses 22 variables to predict the dependent outcome variable.
+
+**Stepwise Selection**: In stepwise selection, the model iterates by adding or eliminating the independent variables and testing each step's significance. Here, the final stepwise selection model selects 22 variables that are significant in classifying the Attrition_Flag variable. The p-value of 0.11 indicates that credit limit variables do not significantly impact the classification in the stepwise model.
+
+The next step is predicting the classification of test data. The model produces an estimated probability of being one, like P(Existing Customer | Dependent_Count). I then classify the output values as 0 or 1 by establishing the cutoff range. For example, if the estimated probability is less than the cutoff, it is classified as 1, if not 0. The default value of cutoff is 0.5, and it can be changed to attain maximum accuracy. Thus, a logistic regression model helps in classifying and predicting the probability of belonging to a class. 
+
+The odds of the customer continuing to use the credit card for those whose card category is gold is 1.8 times as the odds of the customer continuing to use the credit card for those who do not have the card with the category as gold. 
+
+The customer's odds of using the credit card for those whose income category is between 40k to 60k  is 0.9 times less than the customer's odds of using the credit card for those who do not have a salary between 40k to 60k.
+
+The customer's odds of using the credit card decreases by 79% if the transaction count in the past 12 months increases by one. 
+
+The customer's odds of using the credit card decrease by 20% for every increase in the average utilization ratio of credit cards. 
+
+The customer's odds of using the credit card increase by 10% if the dependent count increases by one. 
+
+My main objective is to identify the potential attrited customers, and hence the focus is to have a good or high specificity value. 
+
+The model with the cutoff of 0.5 for stepwise selection has a higher specificity value of 83.11% with a minimum error rate of 17.20% compared to all other models. The accuracy of the stepwise selection model with a 0.5 cutoff is 82.07%. 
+
+### CART - Classification/Decision Tree
+CART is a predictive model used to predict outcome variables based on other variables in the dataset. Its output is a decision tree in which each branch splits a predictor variable, and each leaf contains a prediction for the outcome variable.
+```{r CART}
+
+# Classification Tree with rpart
+K = 10 # number of cross-validations
+fit = rpart(Attrition_Flag ~ ., method="class", data=normalized_dat9_over, cp = 1e-2, minsplit=5, xval=K) # same as using all other variables as predictors
+
+# Minimum Error Tree
+pfit.me = prune(fit, cp = fit$cptable[which.min(fit$cptable[,"xerror"]),"CP"])
+rpart.plot(pfit.me, main = 'Min Error Tree')
+
+# Best Pruned Tree
+ind = which.min(fit$cptable[,"xerror"]) # xerror: cross-validation error
+se1 = fit$cptable[ind,"xstd"]/sqrt(K) # 1 standard error
+xer1 = min(fit$cptable[,"xerror"]) + se1 # targeted error: min + 1 SE
+ind0 = which.min(abs(fit$cptable[1:ind,"xerror"] - xer1)) # select the tree giving closest xerror to xer1
+pfit.bp = prune(fit, cp = fit$cptable[ind0,"CP"])
+rpart.plot(pfit.bp, main = 'Best Pruned Tree')
+
+
+yhat = predict(pfit.bp, normalized_dat9_over, type = "class") 
+err.bp = 1 - mean(yhat == normalized_dat9_over$Attrition_Flag)
+
+# if you want to use a cutoff not equal to 0.5
+prob1 = predict(pfit.bp, normalized_dat9_over, type = "prob")[,2]
+pred.class = as.numeric(prob1 > .5) # change to .3 or .4,.5
+ytest = as.numeric(normalized_dat9_over$Attrition_Flag)-1
+unique(as.numeric(ytest))
+unique(normalized_dat9_over$Attrition_Flag)
+err.bp.newCut = 1 - mean(pred.class == ytest)
+err.bp.newCut
+
+table(pred.class, ytest)
+#Confusion matrix and Stats
+confusionMatrix(yhat, normalized_dat9_over$Attrition_Flag) 
+
+sen = function(ytrue, yhat) {
+  ind.true1 = which(ytrue == 1)
+  mean( ytrue[ind.true1] == yhat[ind.true1] )
+}
+
+spe = function(ytrue, yhat) {
+  ind.true0 = which(ytrue == 0)
+  mean( ytrue[ind.true0] == yhat[ind.true0] )
+}
+
+sen(ytest, pred.class)
+spe(ytest, pred.class)
+```
+I used all the variables to generate a Single Tree in the Classification Tree analysis and began by partitioning the data into training and validation. Next, I selected Best Pruned Tree and Minimum Error Tree using the validation data. As a result, it will pare down the full-grown tree and provide us with a simpler model demonstrating the minimum error. The cross-validation for the model was set to ten. 
+The output from selected parameters showed closely related trees, with six decision nodes and nine leaves for both Best Pruned Tree and Minimum Error Tree on the validation data as shown below. 
+The tree shows that the Total Transaction Count is the most important predictor, followed by the Total Revolving Balance. According to the trees, other key predictors are Total Amount Change (Q4-Q1), Total Relationship Count, Credit Limit, and Months Inactive in the 12 months.
+
+Using Best Pruned Tree, our validation data scoring showed a min error of 0.1326 (for cut-off 0.3, 0.4 & 0.5). The sensitivity and specificity at each cut-off are shown below.
+
+|               | **Sensitivity** | **Specificity** |
+| ------------- | --------------- | --------------- |
+| Cutoff  = 0.3 | 0.9079          | 0.7784          |
+| Cutoff = 0.4  | 0.8361          | 0.8786          |
+| Cutoff = 0.5  | 0.8361          | 0.8786          |
+
+Summary of Performance of each model is shown below:
+
+|             |             | **Logistic Regression** |              |              | kNN   | Classifcation Tree |
+| ----------- | ----------- | ----------------------- | ------------ | ------------ | ----- | ------------------ |
+|             |             | **Forward**             | **Backward** | **Stepwise** |       |                    |
+| Cutoff=.5   | Val ER      | 0.173                   | 0.174        | 0.172        | 0.128 | 0.133              |
+|             | Sensitivity | 0.823                   | 0.819        | 0.823        | 0.791 | 0.836              |
+|             | Specificity | 0.831                   | 0.832        | 0.831        | 0.951 | 0.879              |
+| Cutoff=.4   | Val ER      | 0.181                   | 0.182        | 0.181        | 0.121 | 0.133              |
+|             | Sensitivity | 0.870                   | 0.871        | 0.871        | 0.815 | 0.836              |
+|             | Specificity | 0.765                   | 0.764        | 0.765        | 0.940 | 0.879              |
+| Cutoff = .3 | Val ER      | 0.203                   | 0.202        | 0.200        | 0.123 | 0.133              |
+|             | Sensitivity | 0.901                   | 0.901        | 0.901        | 0.819 | 0.908              |
+|             | Specificity | 0.689                   | 0.691        | 0.689        | 0.934 | 0.778              |
+
+
+## Conclusion
+ From the Logistic Regression model, the top five variables associated with sucessful customer retention are  
+1. Total transaction count
+2. Total revolving balance
+3. Total relationship count
+4. Total count change
+5. Marital status. 
+
+The more a customer spends with a particular bank, the less likely the customer will churn (total transaction count, total revolving balance, total count change). Additionally, the more products a customer owns from the bank, the less likely they will churn (total relationship count). If a customer is married, the chances of them churning also decreases. 
+
+The top five variables associated with  churn are : 
+1. Card Category: Gold
+2. Income: 120K+
+3. Contacts Count
+4. Months Inactive
+5. Gender.
+
+The CART model also identified that Total transaction count is the most important predictor for churning, followed by total revolving balance, total amount change (Q4-Q1), total relationship count, credit limit, and months inactive in 12 months.
+
+From the three models, I recommend using KNN with a cutoff value of 0.5. Although the KNN model has the highest overall error rate at 12.8%, it also has the highest specificity rate at 95.1%. The Specificity rate tells us that the KNN model can accurately predict, up to 95.1%, whether a customer will churn from the bank. 
+
+The bank can perform some preventative measures using the kNN model to find closely related attributes to keep their current customer from churning and potentially attract more customers through existing customer recommendations.
